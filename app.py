@@ -42,7 +42,7 @@ def add_technical_indicators(df):
     
     df.fillna(method="bfill", inplace=True)  # Remplissage des valeurs NaN
     return df
-def prepare_data(df, window_size=7):
+def prepare_data(df, window_size=30):
     """Prépare les données pour l'entraînement du modèle."""
     df = add_technical_indicators(df)  # Ajout des indicateurs avant la normalisation
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -59,13 +59,14 @@ def prepare_data(df, window_size=7):
 def train_lstm(X, y):
     """Entraîne un modèle LSTM."""
     model = Sequential([
-        LSTM(50, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
-        LSTM(50),
+        LSTM(100, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+        LSTM(100),
         Dense(1)
     ])
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)  # ⬅️ Ajustement du learning rate
     model.compile(optimizer="adam", loss="mean_squared_error")
     
-    model.fit(X, y, epochs=20, batch_size=16, verbose=1)
+    model.fit(X, y, epochs=30, batch_size=32, verbose=1)
     return model
 
 def predict_future_prices(model, df, scaler, days=30):
