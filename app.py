@@ -3,22 +3,23 @@ import requests
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import ta
+import ta  # Librairie pour les indicateurs techniques
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split
-import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.layers import LSTM, Dense
 from sklearn.metrics import mean_squared_error
 
-# 📌 Configuration de l'API CoinGecko
+# Titre de l'application
+st.title("📈 TAO Predictor - Prédiction améliorée")
+
+# API CoinGecko pour récupérer l'historique des prix
 COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/bittensor/market_chart"
 
-# 📥 Fonction pour récupérer les données historiques du prix TAO
 def get_tao_history(days=365):
+    """Récupère les prix de TAO depuis CoinGecko."""
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
     response = requests.get(COINGECKO_URL, params=params)
-
+    
     if response.status_code == 200:
         data = response.json()
         prices = data["prices"]
@@ -29,82 +30,67 @@ def get_tao_history(days=365):
         st.error(f"Erreur {response.status_code} : Impossible de récupérer les données.")
         return None
 
-# 📊 Fonction pour ajouter des indicateurs techniques
 def add_technical_indicators(df):
+    """Ajoute des indicateurs techniques au DataFrame."""
     df["SMA_14"] = ta.trend.sma_indicator(df["price"], window=14)
     df["EMA_14"] = ta.trend.ema_indicator(df["price"], window=14)
     df["RSI"] = ta.momentum.rsi(df["price"], window=14)
     df["MACD"] = ta.trend.macd(df["price"])
-    df["Bollinger_High"] = ta.volatility.bollinger_hband(df["price"])
-    df["Bollinger_Low"] = ta.volatility.bollinger_lband(df["price"])
+    df["ATR"] = ta.volatility.average_true_range(df["price"], window=14)
     
-    # 🚀 Simulation des prix "high" et "low" pour l'ATR
-    df["high"] = df["price"] * (1 + np.random.uniform(0.001, 0.01, len(df)))
-    df["low"] = df["price"] * (1 - np.random.uniform(0.001, 0.01, len(df)))
-    
-    df["ATR"] = ta.volatility.average_true_range(df["high"], df["low"], df["price"], window=14)
-    
-    df.fillna(df.mean(), inplace=True)  # Remplacement des NaN
+    df.fillna(method="bfill", inplace=True)  # Remplissage des valeurs NaN
     return df
 
-# 📌 Préparation des données pour le modèle LSTM
-def prepare_data(df, window_size=14):
+def prepare_data(df, window_size=7):
+    """Prépare les données pour l'entraînement du modèle."""
+    df = add_technical_indicators(df)  # Ajout des indicateurs avant la normalisation
     scaler = MinMaxScaler(feature_range=(0, 1))
-    df_scaled = scaler.fit_transform(df[["price", "SMA_14", "EMA_14", "RSI", "MACD", "ATR"]].values)
+    features = ["price", "SMA_14", "EMA_14", "RSI", "MACD", "ATR"]
+    df_scaled = scaler.fit_transform(df[features].values)
 
     X, y = [], []
-    for i in range(len(df_scaled) - window_size):
+    for i in range(len(df) - window_size):
         X.append(df_scaled[i : i + window_size])
-        y.append(df_scaled[i + window_size, 0])  # Prédiction du prix uniquement
-
+        y.append(df_scaled[i + window_size, 0])  # Prédire uniquement le prix
+    
     return np.array(X), np.array(y), scaler
 
-# 🎯 Modèle LSTM amélioré
 def train_lstm(X, y):
+    """Entraîne un modèle LSTM."""
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
-        Dropout(0.2),
-        LSTM(64, return_sequences=True),
-        Dropout(0.2),
-        LSTM(32),
+        LSTM(50, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+        LSTM(50),
         Dense(1)
     ])
-    
     model.compile(optimizer="adam", loss="mean_squared_error")
     
-    # Entraînement avec validation croisée
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, shuffle=False)
-    
-    model.fit(X_train, y_train, epochs=50, batch_size=16, validation_data=(X_val, y_val), verbose=1)
-    return model, scaler
+    model.fit(X, y, epochs=20, batch_size=16, verbose=1)
+    return model
 
-# 📈 Fonction de prédiction des prix futurs
 def predict_future_prices(model, df, scaler, days=30):
-    last_sequence = df[["price", "SMA_14", "EMA_14", "RSI", "MACD", "ATR"]].values[-14:]
-    last_sequence_scaled = scaler.transform(last_sequence)
-
+    """Prédit les prix futurs."""
+    features = ["price", "SMA_14", "EMA_14", "RSI", "MACD", "ATR"]
+    last_sequence = scaler.transform(df[features].iloc[-7:].values).reshape(1, 7, -1)
     future_prices = []
 
     for _ in range(days):
-        prediction = model.predict(last_sequence_scaled.reshape(1, 14, 6))
-        future_price = scaler.inverse_transform([[prediction[0][0], 0, 0, 0, 0, 0]])[0][0]
+        prediction = model.predict(last_sequence)
+        future_price = scaler.inverse_transform(np.hstack((prediction, np.zeros((1, 5)))))[0][0]
         future_prices.append(future_price)
-
-        last_sequence_scaled = np.roll(last_sequence_scaled, -1, axis=0)
-        last_sequence_scaled[-1, 0] = prediction[0][0]
+        
+        last_sequence = np.roll(last_sequence, -1, axis=1)
+        last_sequence[0, -1, 0] = prediction[0][0]
 
     return future_prices
 
-# 📈 Fonction d'affichage du cours predit vs cours reel
 def plot_real_vs_predicted(df, model, scaler):
-    """Affiche le cours réel et prédit sur un an."""
-    X, y, _ = prepare_data(df)  
-    X = X.reshape(-1, X.shape[1], 1)  
+    """Affiche le cours réel vs prédictions sur l'année écoulée."""
+    X, y, _ = prepare_data(df)
+    X = X.reshape(-1, X.shape[1], X.shape[2])
 
     predictions = model.predict(X)
-    predictions = scaler.inverse_transform(predictions)  
+    predictions = scaler.inverse_transform(np.hstack((predictions, np.zeros((len(predictions), 5)))))[:, 0]
 
-    # Graphique
     plt.figure(figsize=(12, 6))
     plt.plot(df["timestamp"][-len(predictions):], df["price"][-len(predictions):], label="Prix réel", color="blue")
     plt.plot(df["timestamp"][-len(predictions):], predictions, label="Prix prédit", color="orange", linestyle="dashed")
@@ -114,30 +100,25 @@ def plot_real_vs_predicted(df, model, scaler):
     plt.legend()
     st.pyplot(plt)
 
-# 🚀 Interface Streamlit
-st.title("📈 TAO Predictor - Prédiction avec indicateurs techniques")
-
-# Bouton pour entraîner le modèle
+# Entraînement du modèle
 if st.button("🚀 Entraîner le modèle LSTM"):
     df = get_tao_history()
     if df is not None:
         X, y, scaler = prepare_data(df)
-        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
+        model = train_lstm(X.reshape(-1, X.shape[1], X.shape[2]), y)
 
-        # 🆕 Affichage du graphique comparatif
+        # 📊 Affichage des performances
         plot_real_vs_predicted(df, model, scaler)
-
         st.write("✅ Modèle entraîné avec succès !")
     else:
         st.error("Erreur : Impossible d'entraîner le modèle.")
 
-# 📊 Bouton pour afficher les prévisions sur 7 jours
+# Bouton pour afficher les prévisions sur 7 jours
 if st.button("📊 Afficher les prévisions sur 7 jours"):
     df = get_tao_history()
     if df is not None:
-        df = add_technical_indicators(df)
         X, y, scaler = prepare_data(df)
-        model, scaler = train_lstm(X, y)
+        model = train_lstm(X.reshape(-1, X.shape[1], X.shape[2]), y)
         future_prices = predict_future_prices(model, df, scaler, days=7)
 
         plt.figure(figsize=(10, 5))
@@ -153,13 +134,12 @@ if st.button("📊 Afficher les prévisions sur 7 jours"):
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
 
-# 📊 Bouton pour afficher les prévisions sur 30 jours
+# Bouton pour afficher les prévisions sur 30 jours
 if st.button("📊 Afficher les prévisions sur 30 jours"):
     df = get_tao_history()
     if df is not None:
-        df = add_technical_indicators(df)
         X, y, scaler = prepare_data(df)
-        model, scaler = train_lstm(X, y)
+        model = train_lstm(X.reshape(-1, X.shape[1], X.shape[2]), y)
         future_prices = predict_future_prices(model, df, scaler, days=30)
 
         plt.figure(figsize=(10, 5))
