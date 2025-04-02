@@ -36,11 +36,15 @@ def add_technical_indicators(df):
     df["EMA_14"] = ta.trend.ema_indicator(df["price"], window=14)
     df["RSI"] = ta.momentum.rsi(df["price"], window=14)
     df["MACD"] = ta.trend.macd(df["price"])
-    df["ATR"] = ta.volatility.average_true_range(df["price"], window=14)
+    
+    # ✅ Correction de l'ATR
+    df["ATR"] = ta.volatility.average_true_range(high=df["price"], 
+                                                 low=df["price"], 
+                                                 close=df["price"], 
+                                                 window=14)
     
     df.fillna(method="bfill", inplace=True)  # Remplissage des valeurs NaN
     return df
-
 def prepare_data(df, window_size=7):
     """Prépare les données pour l'entraînement du modèle."""
     df = add_technical_indicators(df)  # Ajout des indicateurs avant la normalisation
