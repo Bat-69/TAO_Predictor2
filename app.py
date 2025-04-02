@@ -38,10 +38,7 @@ def add_technical_indicators(df):
     df["MACD"] = ta.trend.macd(df["price"])
     
     # ✅ Correction de l'ATR
-    df["ATR"] = ta.volatility.average_true_range(high=df["price"], 
-                                                 low=df["price"], 
-                                                 close=df["price"], 
-                                                 window=14)
+    df["ATR"] = ta.volatility.average_true_range(high=df["price"], low=df["price"], close=df["price"], window=14)
     
     df.fillna(method="bfill", inplace=True)  # Remplissage des valeurs NaN
     return df
