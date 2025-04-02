@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import ta  # Librairie pour les indicateurs techniques
 from sklearn.preprocessing import MinMaxScaler
