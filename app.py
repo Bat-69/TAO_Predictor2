@@ -95,6 +95,25 @@ def predict_future_prices(model, df, scaler, days=30):
 
     return future_prices
 
+# 📈 Fonction d'affichage du cours predit vs cours reel
+def plot_real_vs_predicted(df, model, scaler):
+    """Affiche le cours réel et prédit sur un an."""
+    X, y, _ = prepare_data(df)  
+    X = X.reshape(-1, X.shape[1], 1)  
+
+    predictions = model.predict(X)
+    predictions = scaler.inverse_transform(predictions)  
+
+    # Graphique
+    plt.figure(figsize=(12, 6))
+    plt.plot(df["timestamp"][-len(predictions):], df["price"][-len(predictions):], label="Prix réel", color="blue")
+    plt.plot(df["timestamp"][-len(predictions):], predictions, label="Prix prédit", color="orange", linestyle="dashed")
+    plt.xlabel("Date")
+    plt.ylabel("Prix en USD")
+    plt.title("📈 Comparaison Cours Réel vs Prédit")
+    plt.legend()
+    st.pyplot(plt)
+
 # 🚀 Interface Streamlit
 st.title("📈 TAO Predictor - Prédiction avec indicateurs techniques")
 
@@ -102,12 +121,11 @@ st.title("📈 TAO Predictor - Prédiction avec indicateurs techniques")
 if st.button("🚀 Entraîner le modèle LSTM"):
     df = get_tao_history()
     if df is not None:
-        df = add_technical_indicators(df)
         X, y, scaler = prepare_data(df)
-        model, scaler = train_lstm(X, y)
+        model = train_lstm(X.reshape(-1, X.shape[1], 1), y)
 
-        mse = mean_squared_error(y, model.predict(X))
-        st.write(f"📊 **Performance du modèle (MSE) : {mse:.4f}**")
+        # 🆕 Affichage du graphique comparatif
+        plot_real_vs_predicted(df, model, scaler)
 
         st.write("✅ Modèle entraîné avec succès !")
     else:
