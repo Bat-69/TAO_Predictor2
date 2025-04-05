@@ -73,6 +73,20 @@ def generate_prediction_explanation(df):
 
     return " | ".join(explanation)
 
+def generate_trade_recommendation(current_price, future_prices):
+    """Génère une recommandation (BUY, HOLD, SELL) selon la variation prévue du prix."""
+    projected_price = future_prices[-1]
+    change_pct = ((projected_price - current_price) / current_price) * 100
+
+    if change_pct > 5:
+        recommendation = "BUY"
+    elif change_pct < -5:
+        recommendation = "SELL"
+    else:
+        recommendation = "HOLD"
+
+    return recommendation, projected_price, change_pct
+
 def prepare_data(df, window_size=30):
     """Prépare les données pour l'entraînement du modèle."""
     df = add_technical_indicators(df)  # Ajout des indicateurs avant la normalisation
@@ -167,6 +181,12 @@ if st.button("📊 Afficher les prévisions sur 7 jours"):
         
         explanation = generate_prediction_explanation(df)
         st.info(f"**Explication technique (jour actuel)** : {explanation}")
+        
+        current_price = df["price"].iloc[-1]
+        recommendation, projected_price, change_pct = generate_trade_recommendation(current_price, future_prices)
+
+        st.subheader("💡 Recommandation")
+        st.success(f"**{recommendation}** — Variation prévue : {change_pct:.2f}% | Prix cible : ${projected_price:.2f}")
     
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
@@ -192,6 +212,11 @@ if st.button("📊 Afficher les prévisions sur 30 jours"):
         
         explanation = generate_prediction_explanation(df)
         st.info(f"**Explication technique (jour actuel)** : {explanation}")
-    
+        
+        current_price = df["price"].iloc[-1]
+        recommendation, projected_price, change_pct = generate_trade_recommendation(current_price, future_prices)
+
+        st.subheader("💡 Recommandation")
+        st.success(f"**{recommendation}** — Variation prévue : {change_pct:.2f}% | Prix cible : ${projected_price:.2f}")
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
