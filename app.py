@@ -43,6 +43,36 @@ def add_technical_indicators(df):
     
     df.fillna(method="bfill", inplace=True)  # Remplissage des valeurs NaN
     return df
+
+def generate_prediction_explanation(df):
+    """Génère une explication à partir des indicateurs techniques du dernier jour."""
+    last_row = df.iloc[-1]
+    explanation = []
+
+    # Analyse MACD
+    if last_row["MACD"] > 0:
+        explanation.append("MACD positif")
+    else:
+        explanation.append("MACD négatif")
+
+    # Analyse RSI
+    if last_row["RSI"] > 70:
+        explanation.append("RSI en surachat (>70)")
+    elif last_row["RSI"] < 30:
+        explanation.append("RSI en survente (<30)")
+    elif last_row["RSI"] > 50:
+        explanation.append("RSI haussier (>50)")
+    else:
+        explanation.append("RSI baissier (<50)")
+
+    # Détection d'une divergence simple (très basique ici)
+    if df["price"].iloc[-1] > df["price"].iloc[-2] and last_row["RSI"] < df["RSI"].iloc[-2]:
+        explanation.append("divergence baissière entre le cours et le RSI")
+    elif df["price"].iloc[-1] < df["price"].iloc[-2] and last_row["RSI"] > df["RSI"].iloc[-2]:
+        explanation.append("divergence haussière entre le cours et le RSI")
+
+    return " | ".join(explanation)
+
 def prepare_data(df, window_size=30):
     """Prépare les données pour l'entraînement du modèle."""
     df = add_technical_indicators(df)  # Ajout des indicateurs avant la normalisation
@@ -134,6 +164,10 @@ if st.button("📊 Afficher les prévisions sur 7 jours"):
         plt.title("📈 Prédiction du prix TAO sur 7 jours")
         plt.legend()
         st.pyplot(plt)
+        
+        explanation = generate_prediction_explanation(df)
+        st.info(f"**Explication technique (jour actuel)** : {explanation}")
+    
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
 
@@ -155,5 +189,9 @@ if st.button("📊 Afficher les prévisions sur 30 jours"):
         plt.title("📈 Prédiction du prix TAO sur 30 jours")
         plt.legend()
         st.pyplot(plt)
+        
+        explanation = generate_prediction_explanation(df)
+        st.info(f"**Explication technique (jour actuel)** : {explanation}")
+    
     else:
         st.error("Erreur : Impossible d'afficher les prévisions.")
